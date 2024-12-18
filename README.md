@@ -16,7 +16,7 @@ This repository contains a Python-based application for real-time skeleton and o
 
 Before running this application, you need to install the following Python packages:
 
-- `opencv-python` for video processing and rendering.
+- `opencv-contrib-python` for video processing and rendering.
 - `numpy` for numerical operations.
 - `scipy` for system solving.
 
@@ -25,6 +25,9 @@ These packages can be installed using pip:
 ```bash
 pip install opencv-contrib-python numpy scipy
 ```
+
+You also need files for setting the deep learning models. The models used are available [on this Google Drive](https://drive.google.com/drive/folders/1z2JPdyjzKaJz0SWsFOwZkL8-60u12jn_)  
+Download the compressed folder and decompress it at the root of the project.
 
 ## Modules Description
 
