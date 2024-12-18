@@ -233,7 +233,7 @@ class SkeletonTracker:
 
         self.current_frame = 0
 
-        self.flip = True
+        self.flip = False
 
     def update(self, img: np.ndarray):
 
