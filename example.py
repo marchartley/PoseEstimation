@@ -51,21 +51,6 @@ def main():
             cv2.circle(img, position.astype(int), 3, couleur, -1)
             cv2.putText(img, f"{label}",
             position.astype(int), cv2.FONT_HERSHEY_SIMPLEX, 1, couleur, 2)
-        #
-        # couleur = (0, 255, 255)
-        # for iArticulation, articulation in enumerate(articulations):
-        #     if not np.isnan(articulation).any():
-        #         position = np.array([articulation[1] * img.shape[1], articulation[0] * img.shape[0]])
-        #         nom = Parsers.POSE_PARTS[iArticulation]
-        #         cv2.circle(img, position.astype(int), 3, couleur, -1)
-        #         cv2.putText(img, f"{nom}", position.astype(int), cv2.FONT_HERSHEY_SIMPLEX, 1, couleur, 2)
-        #
-        # for pair in Parsers.POSE_PAIRS:
-        #     artA, artB = articulations[pair[0]], articulations[pair[1]]
-        #     if not np.isnan(artA).any() and not np.isnan(artB).any():
-        #         posA = np.array([artA[1] * img.shape[1], artA[0] * img.shape[0]])
-        #         posB = np.array([artB[1] * img.shape[1], artB[0] * img.shape[0]])
-        #         cv2.line(img, posA.astype(int), posB.astype(int), couleur, 2)
 
         fps.update()
         img = fps.display(img)
@@ -74,7 +59,6 @@ def main():
         if key == ord("q") or key == 27:
             break
     cv2.destroyAllWindows()
-# Bonne pratique : ajouter cet idiome
-# dans nos scripts
+    
 if __name__ == "__main__":
     main()
