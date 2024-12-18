@@ -18,11 +18,12 @@ Before running this application, you need to install the following Python packag
 
 - `opencv-python` for video processing and rendering.
 - `numpy` for numerical operations.
+- `scipy` for system solving.
 
 These packages can be installed using pip:
 
 ```bash
-pip install opencv-python numpy
+pip install opencv-contrib-python numpy scipy
 ```
 
 ## Modules Description
@@ -51,7 +52,7 @@ python main.py
 
 ## Contributing
 
-Contributions to this project are welcome. Please feel free to fork the repository, make changes, and submit pull requests.
+This project has no ambition to be used for more than education purposes. However, contributions to this project are welcome. Please feel free to fork the repository, make changes, and submit pull requests.
 
 ## License
 
