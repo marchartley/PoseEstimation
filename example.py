@@ -9,7 +9,7 @@ from SkeletonTracker import SkeletonTracker
 
 def main():
     EPSILON = 1
-    video_path = 0
+    video_path = 0 # "../ImageProcessing/BodyVideos/body9.mp4"
     cap = cv2.VideoCapture(video_path)
     fps = FPSCounter()
 
@@ -59,6 +59,6 @@ def main():
         if key == ord("q") or key == 27:
             break
     cv2.destroyAllWindows()
-    
+
 if __name__ == "__main__":
     main()
