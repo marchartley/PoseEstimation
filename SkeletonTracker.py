@@ -155,15 +155,39 @@ class ObjectDetected:
         self.label = label
         self.box = box
         self.confidence = confidence
+        self.maxTimeAlive = 10
+        self.timeAlive = self.maxTimeAlive
 
     def afficherTerminal(self):
         print(f"{self.label} detecté à {int(self.confidence * 100)}% aux coordonnées {self.box}")
+
+    def displayBox(self, img, color = (0, 0, 255)):
+        box = self.box
+        cv2.rectangle(img, [box[0], box[1]], [box[0] + box[2], box[1] + box[3]], color, 2)
+        cv2.putText(img,
+                    f"{self.label} ({int(self.confidence * 100)}%)",
+                    (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                    color, 2)
+        return img
+    def displayCenter(self, img, color = (0, 0, 255)):
+        position = self.center()
+        label = self.label
+        cv2.circle(img, position.astype(int), 3, color, -1)
+        cv2.putText(img, f"{label}",
+        position.astype(int), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+        return img
 
     def center(self):
         return np.array(self.box[:2]) + np.array(self.box[2:]) * 0.5
 
     def distanceToCenter(self, pos_x, pos_y):
         return np.linalg.norm(np.array([pos_x, pos_y]) - self.center())
+
+    def update(self):
+        self.timeAlive -= 1
+        return self
+    def alive(self):
+        return self.timeAlive > 0
 
 
 class SkeletonTracker:
@@ -200,8 +224,8 @@ class SkeletonTracker:
         hand_netOutputSize = np.ceil(self.hand_netInputSize / 8).astype(int)
         self.hand_heatmaps = np.zeros((22, hand_netOutputSize[0], hand_netOutputSize[1]))
 
-        yolo_config_path = "models/yolo/yolov4-tiny.cfg"
-        yolo_weights_path = "models/yolo/yolov4-tiny.weights"
+        yolo_config_path = "models/yolo/yolov4.cfg"
+        yolo_weights_path = "models/yolo/yolov4.weights"
         self.yolo_net = cv2.dnn.readNetFromDarknet(yolo_config_path, yolo_weights_path)
         self.yolo_netInputSize = yolo_resolution
         self.yolo_threshold = yolo_threshold
@@ -222,7 +246,7 @@ class SkeletonTracker:
             print("Network successfully loaded.")
 
         self.persons: List[Person] = []
-        self.objects_detected = []
+        self.objects_detected: List[ObjectDetected] = []
 
         self.use_body = use_body
         self.use_face = use_face
@@ -238,10 +262,11 @@ class SkeletonTracker:
     def update(self, img: np.ndarray):
 
         if self.use_yolo:
-            inpBlob = cv2.dnn.blobFromImage(img, 1.0 / 255, self.yolo_netInputSize, (127.5, 127.5, 127.5), crop=False, swapRB=True)
-            self.yolo_net.setInput(inpBlob)
-            out = self.yolo_net.forward()
-            self.objects_detected = self.detections_Yolo(img, out)
+            if self.current_frame % (self.skip_frames + 1) == 0:
+                inpBlob = cv2.dnn.blobFromImage(img, 1.0 / 255, self.yolo_netInputSize, (127.5, 127.5, 127.5), crop=False, swapRB=True)
+                self.yolo_net.setInput(inpBlob)
+                out = self.yolo_net.forward()
+                self.objects_detected = self.detections_Yolo(img, out)
 
         if self.use_body:
             if self.current_frame % (self.skip_frames + 1) == 0:
@@ -504,7 +529,7 @@ class SkeletonTracker:
     def detections_Yolo(self, frame, outs):
         res = parseYoloResults(frame, outs, self.yolo_threshold)
 
-        objects: List[ObjectDetected] = []
+        objects: List[ObjectDetected] = [obj for obj in self.objects_detected if obj.update().alive()]
         for detection in res:
             classId = detection["id"]
             label = self.yolo_classes[classId]
@@ -515,7 +540,9 @@ class SkeletonTracker:
             for others in objects:
                 if others.idClasse == classId and others.distanceToCenter(*objDetection.center()) < 0.5 * (box[2] ** 2 + box[3] ** 2) ** 0.5:
                     needToBeAdded = False
-                    break
+                    others.timeAlive = others.maxTimeAlive
+                    others.confidence = max(others.confidence, confidence)
+                    others.box = box
             if needToBeAdded:
                 objects.append(objDetection)
         return objects
