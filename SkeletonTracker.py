@@ -224,8 +224,8 @@ class SkeletonTracker:
         hand_netOutputSize = np.ceil(self.hand_netInputSize / 8).astype(int)
         self.hand_heatmaps = np.zeros((22, hand_netOutputSize[0], hand_netOutputSize[1]))
 
-        yolo_config_path = "models/yolo/yolov4.cfg"
-        yolo_weights_path = "models/yolo/yolov4.weights"
+        yolo_config_path = "models/yolo/yolov4-tiny.cfg"
+        yolo_weights_path = "models/yolo/yolov4-tiny.weights"
         self.yolo_net = cv2.dnn.readNetFromDarknet(yolo_config_path, yolo_weights_path)
         self.yolo_netInputSize = yolo_resolution
         self.yolo_threshold = yolo_threshold
