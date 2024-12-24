@@ -181,18 +181,19 @@ class Person(SkeletonDetection):
 
     def displaySkeleton(self, image, color = (0, 255, 255)):
         pos = self.pos()
-        cv2.circle(image, np.array([pos[1] * image.shape[1], pos[0] * image.shape[0]]).astype(int), 5, (0, 0, 255),
-                   -1)
+        # cv2.circle(image, np.array([pos[1] * image.shape[1], pos[0] * image.shape[0]]).astype(int), 5, (0, 0, 255),
+        #            -1)
         cv2.putText(image, f"{self.id}", np.array([pos[1] * image.shape[1], pos[0] * image.shape[0]]).astype(int),
                     cv2.FONT_HERSHEY_SIMPLEX, 1,
-                    (0, 255, 0), 2, cv2.LINE_AA)
+                    color, 2, cv2.LINE_AA)
 
         skeleton = self.skeleton()
         for pair in POSE_PAIRS:
             bodyA, bodyB = skeleton[pair[0]], skeleton[pair[1]]
             if not np.isnan(bodyA).any() and not np.isnan(bodyB).any():
-                cv2.line(image, np.array([bodyA[1] * image.shape[1], bodyA[0] * image.shape[0]]).astype(int),
-                         np.array([bodyB[1] * image.shape[1], bodyB[0] * image.shape[0]]).astype(int), (0, 255, 0), 2)
+                posA = np.array([bodyA[1] * image.shape[1], bodyA[0] * image.shape[0]]).astype(int)
+                posB = np.array([bodyB[1] * image.shape[1], bodyB[0] * image.shape[0]]).astype(int)
+                cv2.line(image, posA, posB, color, 2)
 
         for iPart in range(25):
             body = skeleton[iPart]
@@ -225,8 +226,16 @@ class HandDetected(SkeletonDetection):
         for iPart in range(self.nb_articulations):
             body = skeleton[iPart]
             if not np.isnan(body).any():
-                cv2.circle(image, np.array([body[1] * image.shape[1], body[0] * image.shape[0]]).astype(int), 3,
-                           color, -1)
+                position = np.array([body[1] * image.shape[1], body[0] * image.shape[0]]).astype(int)
+                cv2.circle(image, position, 3, color, -1)
+                cv2.putText(image, HAND_PARTS[iPart], position, cv2.FONT_HERSHEY_SIMPLEX, 1.0, color)
+
+        for pair in HAND_PAIRS:
+            bodyA, bodyB = skeleton[pair[0]], skeleton[pair[1]]
+            if not np.isnan(bodyA).any() and not np.isnan(bodyB).any():
+                posA = np.array([bodyA[1] * image.shape[1], bodyA[0] * image.shape[0]]).astype(int)
+                posB = np.array([bodyB[1] * image.shape[1], bodyB[0] * image.shape[0]]).astype(int)
+                cv2.line(image, posA, posB, color, 2)
         return image
 
 
@@ -391,6 +400,7 @@ class Aruco(Detection):
     def display(self, img, color = (0, 255, 0)):
         cv2.putText(img, f"{self.aruco_id}", self.center().astype(int), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2, cv2.LINE_AA)
         cv2.polylines(img, [np.array([self.topRight(), self.topLeft(), self.bottomLeft(), self.bottomRight()]).astype(int)], True, color, 2)
+        return img
 
 
 class SkeletonTrackerParameters:
@@ -500,6 +510,13 @@ class SkeletonTracker:
                 self.use_hands = False
                 self.use_face = False
 
+        if self.use_face:
+            self.use_face = False
+            print("[Warning] Unfortunately, current implementation is not efficient at all with faces. Faces are deactivated.")
+
+        if self.use_hands:
+            print("[Warning] The hand detection system is still very very bad and should not be used right now... ")
+
         self.face_cascade = cv2.CascadeClassifier(parameters.cascade_front_path)
         self.face_profile_cascade = cv2.CascadeClassifier(parameters.cascade_profile_path)
         self.fullbody_cascade = cv2.CascadeClassifier(parameters.cascade_fullbody_path)
@@ -567,7 +584,7 @@ class SkeletonTracker:
 
         if self.use_hands:
             if self.current_frame % (self.hand_skip + 1) == 0:
-                self.getHands(img, 0.0)
+                self.getHands(img, -1.0)
 
         if self.use_aruco:
             if self.current_frame % (self.aruco_skip + 1) == 0:
@@ -627,28 +644,35 @@ class SkeletonTracker:
                 person.newFace(np.ones_like(person.face_history[0]) * np.nan)
 
     @staticmethod
-    def _call_network(image, network, input_size):
-        inpBlob = cv2.dnn.blobFromImage(image, 1.0 / 255, input_size, (127.5, 127.5, 127.5), swapRB=True, crop=False)
+    def _call_network(image, network, input_size, normalize=True, swapRB=True):
+        if normalize:
+            inpBlob = cv2.dnn.blobFromImage(image, 1.0 / 255, input_size, (127.5, 127.5, 127.5), swapRB=swapRB, crop=False)
+        else:
+            inpBlob = cv2.dnn.blobFromImage(image, 1.0, input_size, (0, 0, 0), swapRB=swapRB, crop=False)
         network.setInput(inpBlob)
         output = network.forward()
         return output[0]
 
     @staticmethod
     def _update_heatmaps(net_output, threshold, heatmaps):
-        decay = 0.9
-        big = np.array([cv2.resize(out, (heatmaps[0].shape[1], heatmaps[0].shape[0]), interpolation=cv2.INTER_CUBIC) for out in net_output])
+        decay = 1.0
+        big = np.array([abs(cv2.resize(out, (heatmaps[0].shape[1], heatmaps[0].shape[0]), interpolation=cv2.INTER_CUBIC)) for out in net_output])
         heatmaps = heatmaps * (1 - decay) + big * decay
         # heatmaps[heatmaps < threshold] = 0
         return heatmaps
 
     @staticmethod
-    def _extract_peaks(heatmap, threshold):
+    def _extract_peaks(heatmap, threshold, limit =  None):
         heatmap[heatmap < threshold] = 0
         peaks = (cv2.dilate(heatmap, kernel=np.ones((3, 3))) == heatmap) * (
                 heatmap > threshold)
         peaks_coords = (np.argwhere(peaks))
         peaks_vals = [heatmap[x, y] for x, y in peaks_coords]
         peaks_coords = peaks_coords[np.argsort(-heatmap[tuple(peaks_coords.T)])].astype(np.float32) / np.array([heatmap.shape[0], heatmap.shape[1]])
+        peaks_vals = sorted(peaks_vals, reverse=True)
+        if limit is not None and limit > -1:
+            peaks_vals = peaks_vals[:limit]
+            peaks_coords = peaks_coords[:limit]
         return peaks_coords, peaks_vals
 
     def getPoses(self, img, threshold=0.1):
@@ -713,23 +737,33 @@ class SkeletonTracker:
         self.persons = sorted([p for p in self.persons], key = lambda p: -p.totalTimeAlive)[:self.max_bodies]
         return self.persons
 
-    def getHands(self, img, threshold=0.01):
+    def getHands(self, img, threshold=0.0):
         image = img.copy()
         if self.flip:
             image = cv2.flip(image, 1)
-
-        output = self._call_network(image, self.hand_net, self.hand_netInputSize)
+        output = self._call_network(image, self.hand_net, self.hand_netInputSize, normalize=True, swapRB=False)
         self.hand_heatmaps = self._update_heatmaps(output, threshold, self.hand_heatmaps)
+        max_hands = 0
+        for p in self.persons:
+            if p.articulationVisible("RWrist"):
+                max_hands += 1
+            if p.articulationVisible("LWrist"):
+                max_hands += 1
+
+        self.hands = self.hands[:max_hands]
+        if len(self.hands) < max_hands:
+            self.hands = self.hands + [HandDetected() for _ in range(max_hands - len(self.hands))]
 
         for iPart in range(self.hand_heatmaps.shape[0]):
-            peaks_coords, peaks_vals = self._extract_peaks(self.hand_heatmaps[iPart], threshold)
-            print(f"Part {iPart}: {peaks_vals}")
+            peaks_coords, peaks_vals = self._extract_peaks(self.hand_heatmaps[iPart], threshold, limit= 2 * max_hands)
 
             costMatrix = np.ones((len(self.hands), len(peaks_coords))) * np.inf
             for iHand, hand in enumerate(self.hands):
                 skeleton = hand.skeleton()
                 pos = skeleton[iPart]
-                otherParts = [] # [skeleton[A] if A != iPart else skeleton[B] for A, B in POSE_PAIRS if iPart in (A, B) and not np.isnan(skeleton[A]).any() and not np.isnan(skeleton[B]).any()]
+                if np.isnan(pos).any():
+                    pos = np.array([0, 0])
+                otherParts = [skeleton[A] if A != iPart else skeleton[B] for A, B in HAND_PAIRS if iPart in (A, B) and not np.isnan(skeleton[A]).any() and not np.isnan(skeleton[B]).any()]
                 for iCoord, coord in enumerate(peaks_coords):
                     diff = (coord - pos) ** 2
                     for other in otherParts:
@@ -746,63 +780,6 @@ class SkeletonTracker:
                     hand.newSkeletonPos(iPart, [None, None])
         self.hands = sorted([p for p in self.hands], key = lambda p: -p.totalTimeAlive)
         return self.hands
-
-        # heatmap = cv2.resize(heatmap, (heatmap.shape[1], heatmap.shape[0]))
-        # heatmap[heatmap < threshold] = 0
-        # # heatmap[heatmap >= threshold] = 1
-        # peaks = (cv2.dilate(heatmap, kernel=np.ones((3, 3))) == heatmap) * (
-        #         heatmap > threshold)  # cv2.dilate(heatmap, kernel=np.ones((10, 10))) == heatmap
-        # peaks_coords = np.argwhere(peaks) / np.array([heatmap.shape[0], heatmap.shape[1]])
-        #
-        # self.persons = [pers.update() for pers in self.persons if pers.alive()]
-        #
-        # distance_threshold = 0.25 ** 2
-        # costMatrix = np.ones((len(self.persons), len(peaks_coords))) * np.inf
-        # for iPerson, person in enumerate(self.persons):
-        #     pos = person.pos()
-        #     for iCoord, coord in enumerate(peaks_coords):
-        #         diff = (coord - pos) ** 2
-        #         sqrDist = diff[0] + diff[1]
-        #         if sqrDist < distance_threshold:
-        #             costMatrix[iPerson, iCoord] = sqrDist
-        #
-        # newPersonsCoords = [i for i in range(len(peaks_coords))]
-        # try:
-        #     row_ind, col_ind = linear_sum_assignment(costMatrix)
-        #     for iPerson, iCoord in zip(row_ind, col_ind):
-        #         self.persons[iPerson].newPos(peaks_coords[iCoord])
-        #         self.persons[iPerson].refresh()
-        #         newPersonsCoords.remove(iCoord)
-        #
-        #     for iCoord in newPersonsCoords:
-        #         self.persons.append(Person(peaks_coords[iCoord]))
-        # except:
-        #     pass
-        #
-        # for iPart in range(self.hand_heatmaps.shape[0]):
-        #     heatmap = output[iPart]
-        #     heatmap = cv2.resize(heatmap, (heatmap.shape[1], heatmap.shape[0]))
-        #     heatmap[heatmap < threshold] = 0
-        #     peaks = (cv2.dilate(heatmap, kernel=np.ones((3, 3))) == heatmap) * (
-        #             heatmap > threshold)
-        #     peaks_coords = np.argwhere(peaks) / np.array([heatmap.shape[0], heatmap.shape[1]])
-        #
-        #     costMatrix = np.ones((len(self.persons), len(peaks_coords))) * np.inf
-        #     for iPerson, person in enumerate(self.persons):
-        #         pos = person.pos()
-        #         for iCoord, coord in enumerate(peaks_coords):
-        #             diff = (coord - pos) ** 2
-        #             sqrDist = diff[0] + diff[1]
-        #             costMatrix[iPerson, iCoord] = sqrDist
-        #
-        #     try:
-        #         row_ind, col_ind = linear_sum_assignment(costMatrix)
-        #
-        #         for iPerson, iCoord in zip(row_ind, col_ind):
-        #             self.persons[iPerson].newSkeletonPos(iPart, peaks_coords[iCoord])
-        #     except Exception as e:
-        #         for person in self.persons:
-        #             person.newSkeletonPos(iPart, [None, None])
 
 
     def detections_Yolo(self, frame, outs):
@@ -875,7 +852,7 @@ def example():
 
     while cap.isOpened():
         ret, img = cap.read()
-        img = cv2.imread("/home/marc/Pictures/Webcam/2024-12-24-012445.jpg")
+        # img = cv2.imread("/home/marc/Pictures/Webcam/2024-12-24-012445.jpg")
         if not ret:
             break
         img = cv2.resize(img, (800, 600))
@@ -888,6 +865,9 @@ def example():
 
         for person in tracking.persons:
             img = person.displaySkeleton(img, (0, 255, 0))
+
+        for hand in tracking.hands:
+            img = hand.displaySkeleton(img, (0, 0, 255))
 
         for aruco in tracking.arucos:
             img = aruco.display(img, (0, 0, 255))

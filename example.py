@@ -24,16 +24,15 @@ def main():
 
         tracking.update(img)
 
-        # objets_detectes = tracking.objects_detected
-        #
-        # couleur = (0, 0, 255)
-        # for detection in objets_detectes:
-        #     detection.displayBox(img, couleur)
-        #     detection.displayCenter(img, couleur)
+        for detection in tracking.objects_detected:
+            detection.displayBox(img)
+            detection.displayCenter(img)
 
-        if len(tracking.persons) > 0:
-            for person in tracking.persons:
-                img = person.displaySkeleton(img)
+        for person in tracking.persons:
+            img = person.displaySkeleton(img)
+
+        for aruco in tracking.arucos:
+            img = aruco.display(img)
 
 
         fps.update()
