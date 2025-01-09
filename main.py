@@ -1,11 +1,9 @@
+import os
+
 import cv2
 import numpy as np
 
-from FPSCounter import FPSCounter
-import Parsers
-from Parsers import parseYoloResults, getSkeleton
-
-from SkeletonTracker import SkeletonTracker
+from PoseEstimation import *
 
 def main():
     EPSILON = 1
@@ -13,7 +11,15 @@ def main():
     cap = cv2.VideoCapture(video_path)
     fps = FPSCounter()
 
-    tracking = SkeletonTracker(use_yolo=True, use_body=True, max_bodies=1)
+    params = SkeletonTrackerParameters()
+    params.use_yolo = True
+    params.use_body = True
+    params.max_bodies = 1
+    params.use_hands = True
+    params.use_face = True
+    params.hand_skip_frames = 0
+    params.models_paths = "PoseEstimation/models"
+    tracking = SkeletonTracker(params)
 
     while cap.isOpened():
         ret, img = cap.read()
@@ -33,6 +39,12 @@ def main():
 
         for aruco in tracking.arucos:
             img = aruco.display(img)
+
+        for hand in tracking.hands:
+            img = hand.displaySkeleton(img)
+
+        for face in tracking.faces:
+            img = face.displaySkeleton(img)
 
 
         fps.update()

@@ -1,2 +1,2 @@
-from PoseEstimation.FPSCounter import *
-from PoseEstimation.SkeletonTracker import *
+from .FPSCounter import *
+from .SkeletonTracker import *
